@@ -20,7 +20,7 @@ canvas{height:100%;max-width:100%;aspect-ratio:3/5;background:#123}
 <div id="menu"><h1>MECHA SHOOTER</h1><button id="b1">혼자 하기</button><button id="b2">방 만들기 (2인 협동)</button><div id="row"><input id="code" placeholder="방 코드" inputmode="numeric" maxlength="4"><button id="b3">참가</button></div><div id="info"></div></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script>
-const SB_URL='',SB_KEY=''; // ← Supabase 프로젝트 URL과 anon key를 여기에 넣으세요 (테트리스에서 쓴 것과 같은 값)
+const SB_URL='https://reezmzkrzixjsfnuyerz.supabase.co',SB_KEY='sb_publishable_U5wG6wIbPQMDgu2OPh-tiA_ltIiXxX-'; // ← Supabase 프로젝트 URL과 anon key를 여기에 넣으세요 (테트리스에서 쓴 것과 같은 값)
 const C=document.getElementById('c'),X=C.getContext('2d'),W=480,H=800,PR=8;C.width=W;C.height=H;
 const ST=[{n:'지상 · 사막 협곡',bg:['#d2b277','#8f6c3a'],boss:'지상 요새'},{n:'해상 · 태평양',bg:['#0f4c81','#1f78b4'],boss:'전함'},{n:'우주 · 궤도',bg:['#02030a','#10143a'],boss:'우주 모함'}],SL=200,ISC=[['#a07a45','#7d5a30'],['#c9b27a','#4a8a3a'],['#3a3f66','#555b8a']];
 const IC={H:'#3d5',P:'#7ff',M:'#fb5',S:'#af6',L:'#ff9',O:'#fd5'},WK=['레이저','미사일','산탄','낙뢰','옵션'];
