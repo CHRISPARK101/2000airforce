@@ -1,10 +1,9 @@
 <!DOCTYPE html>
-<!-- saved from url=(0140)file:///C:/Users/vesco/OneDrive/%EB%B0%94%ED%83%95%20%ED%99%94%EB%A9%B4/Mecha%20Shooter%20%C2%B7%20Top-down%20Co-op%20Action_files/game.html -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Mecha Shooter · Top-down</title>
 <link rel="preconnect" href="https://fonts.googleapis.com/"><link rel="preconnect" href="https://fonts.gstatic.com/" crossorigin="">
-<link href="./css2" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Rajdhani:wght@600;700&family=Noto+Sans+KR:wght@700&display=swap" rel="stylesheet">
 <style>
 :root{--ad:50px;--bg:#050b14;--fg:#e8f3ff;--dim:rgba(190,220,250,.62);--cy:#5ef0ff;--cy2:#1d8fe6;--am:#ffc857;--rd:#ff4d6d;--pn:rgba(9,20,36,.78);--ln:rgba(120,210,255,.18);--ln2:rgba(120,210,255,.38);--fd:'Orbitron','Rajdhani',sans-serif;--ft:'Rajdhani','Noto Sans KR',system-ui,sans-serif;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 *,*::before,*::after{box-sizing:border-box}
@@ -67,9 +66,9 @@ canvas{background:#0b1520;display:block;box-shadow:0 0 0 1px var(--ln),0 30px 90
 </head><body>
 <!-- AD SLOT: put your ad code inside #ad (replace the title) -->
 <div id="ad">MECHA SHOOTER</div>
-<canvas id="c" width="480" height="800" style="width: 60px; height: 100px;"></canvas>
+<canvas id="c" width="480" height="800"></canvas>
 <div id="menu"><div class="card"><div class="brand"><div class="tag">TOP-DOWN · CO-OP ACTION</div><h1>MECHA<span>SHOOTER</span></h1></div><div class="lbl">SELECT MECHA</div><div id="shr"><button data-s="0" class="on">Missile</button><button data-s="1">Laser</button><button data-s="2">Electric</button></div><div id="sd">Homing missiles - strong vs single targets, limited rate</div><div class="lbl">DIFFICULTY</div><div id="dfr"><button data-d="0" class="on">Easy</button><button data-d="1">Normal</button><button data-d="2">Hard</button></div><div id="mm"><button id="b1">Solo Play</button><button id="bf">Play with Friends</button></div><div id="fr" style="display:none"><div class="or">2P CO-OP</div><button id="b2">Create Room</button><div id="row"><input id="code" placeholder="Room code" inputmode="numeric" maxlength="4"><button id="b3">Join</button></div><button id="bk">← Back</button></div><div id="info" style="white-space: pre-line;"></div><div class="keys"><b>WASD</b> Move · <b>SHIFT</b> Dash · <b>SPACE</b> Special · <b>ESC</b> Pause</div></div></div>
-<script src="./supabase.min.js.다운로드"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.4/dist/umd/supabase.min.js"></script>
 <script>
 const SB_URL='https://reezmzkrzixjsfnuyerz.supabase.co',SB_KEY='sb_publishable_U5wG6wIbPQMDgu2OPh-tiA_ltIiXxX-'; // ← Supabase 프로젝트 URL과 anon key를 여기에 넣으세요 (테트리스에서 쓴 것과 같은 값)
 const C=document.getElementById('c'),X=C.getContext('2d'),W=480,H=800,PR=8;C.width=W;C.height=H;
@@ -1134,9 +1133,9 @@ const info=t=>{$('info').textContent=t};
 function send(o){net.ch&&net.ch.send({type:'broadcast',event:'m',payload:o})}
 function conn(code,cb){if(!SB_URL||!SB_KEY){info('Set SB_URL and SB_KEY at the top of the code to play online');return}
  if(typeof supabase=='undefined'){info('Could not load the online library. Check your connection');return}
- net.sb=net.sb||supabase.createClient(SB_URL,SB_KEY);
+ try{net.sb=net.sb||supabase.createClient(SB_URL,SB_KEY)}catch(e){console.error('[mecha] createClient failed',e);info('Online init failed: '+(e&&e.message||e));return}
  const ch=net.sb.channel('mecha-'+code,{config:{broadcast:{self:false}}});net.ch=ch;
- ch.on('broadcast',{event:'m'},({payload})=>onMsg(payload)).subscribe(st=>{if(st=='SUBSCRIBED')cb();else if(st=='CHANNEL_ERROR'||st=='TIMED_OUT')info('Connection failed. Check Supabase settings and network')})}
+ ch.on('broadcast',{event:'m'},({payload})=>onMsg(payload)).subscribe((st,err)=>{console.log('[mecha] channel',st,err||'');if(st=='SUBSCRIBED')cb();else if(st=='CHANNEL_ERROR'||st=='TIMED_OUT'||st=='CLOSED')info('Connection failed ('+st+(err&&err.message?': '+err.message:'')+')\nCheck that the Supabase project is active (not paused) and the network')})}
 function go(){$('menu').style.display='none';PZ=0;run=true}
 function cleanup(){clearInterval(net.jt);clearTimeout(net.jto);if(net.ch&&net.sb){try{net.sb.removeChannel(net.ch)}catch(e){}}net.ch=null;net.guest=0;net.started=0;net.gid=null}
 function leave(msg){cleanup();net.mode='solo';run=false;ptr.d=false;ptr.id=null;$('menu').style.display='flex';info(msg||'')}
