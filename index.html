@@ -100,27 +100,40 @@ function useChg(p){if(S.dp||!p||!p.on||p.dead||p.rs>0||p.en>0||S.over||(p.chg||0
 // ===== SOUND: mute toggle (M key / speaker icon) + procedural BGM (stage theme / boss theme) =====
 let MUTE=0;try{MUTE=+localStorage.getItem('mm')||0}catch(e){}let GOD=0;
 let bgS=0,bgN=0;const SCL=[[0,3,5,7,10],[0,2,5,7,9],[0,3,5,8,10],[0,2,4,7,9],[0,3,6,7,10]];
-// Stage BGM tracks (MP3). Volume is 0..1. Stage 1 uses Canopy_Ambush at 15%.
-const STAGE_BGM={1:{src:'Canopy_Ambush.mp3',vol:0.15},2:{src:'Iron_Piston_Strike.mp3',vol:0.15},3:{src:'Salt_and_Iron.mp3',vol:0.15},4:{src:'City_Under_Fire.mp3',vol:0.15},5:{src:'Before_the_Final_Jump.mp3',vol:0.15}};
-let stageAudio=null,stageAudioSt=0;
-function stopStageBgm(){try{if(stageAudio){stageAudio.pause();stageAudio.currentTime=0}}catch(e){}stageAudio=null;stageAudioSt=0}
+// Stage BGM (MP3). One shared <audio> element is reused for every stage (only the file changes),
+// so tracks never overlap and mobile browsers keep allowing playback after the first touch.
+// Stages beyond the 5th track reuse the tracks in order (6 -> track 1, 7 -> track 2 ...).
+const BGM_TRACKS=['Canopy_Ambush.mp3','Iron_Piston_Strike.mp3','Salt_and_Iron.mp3','City_Under_Fire.mp3','Before_the_Final_Jump.mp3'];
+const BGM_VOL=0.15;
+const BOSS_TRACK='Against_the_Colossus.mp3'; // plays during boss fights
+const BOSS_THEME=0; // 0 = BOSS_TRACK MP3 during boss fights, 1 = old synth boss theme instead
+let bossWarm=null;
+const bgmEl=new Audio();bgmEl.loop=true;bgmEl.preload='auto';
+bgmEl.addEventListener('ended',function(){try{bgmEl.currentTime=0;bgmEl.play().catch(function(){})}catch(e){}});
+let bgmSrc='',bgmRun=null;
+function bgmFile(st){return BGM_TRACKS[(((st||1)-1)%BGM_TRACKS.length+BGM_TRACKS.length)%BGM_TRACKS.length]}
+// Unlock audio on the first touch/click/key so later automatic playback (next stage etc.) is allowed.
+const BGM_UNLOCK_EV=['pointerdown','touchend','keydown','click'];
+function bgmUnlock(){BGM_UNLOCK_EV.forEach(function(ev){window.removeEventListener(ev,bgmUnlock,true)});
+  try{if(!bgmSrc){bgmSrc=bgmFile(1);bgmEl.src=bgmSrc}bgmEl.muted=true;const p=bgmEl.play();if(p&&p.catch)p.catch(function(){})}catch(e){}}
+BGM_UNLOCK_EV.forEach(function(ev){window.addEventListener(ev,bgmUnlock,true)});
+function stopStageBgm(){try{bgmEl.pause();bgmEl.currentTime=0}catch(e){}bgmRun=null}
 function syncStageBgm(){try{
-  if(!run||!S||MUTE||PZ||S.over){if(stageAudio&&!stageAudio.paused)stageAudio.pause();return}
-  // During boss fight, pause stage MP3 and let procedural boss theme take over
-  if(S.boss&&S.ph!==2){if(stageAudio&&!stageAudio.paused)stageAudio.pause();return}
-  const conf=STAGE_BGM[S.st];
-  if(!conf){if(stageAudio){stageAudio.pause();stageAudioSt=0}return}
-  if(!stageAudio||stageAudioSt!==S.st){
-    if(stageAudio){try{stageAudio.pause()}catch(e){}}
-    stageAudio=new Audio(conf.src);stageAudio.loop=true;stageAudio.volume=conf.vol;stageAudioSt=S.st;
-  }
-  stageAudio.volume=conf.vol;
-  if(stageAudio.paused)stageAudio.play().catch(function(){});
+  const boss=!!(S&&S.boss&&S.ph!==2),clear=!!(S&&S.ph===2); // clear = stage-clear sequence after the boss dies (music stops until the next stage)
+  const off=!run||!S||MUTE||PZ||S.over||(BOSS_THEME&&boss)||clear;
+  if(off){if(!bgmEl.paused)bgmEl.pause();return}
+  if(!bossWarm){try{bossWarm=new Audio();bossWarm.preload='auto';bossWarm.src=BOSS_TRACK}catch(e){}} // pre-download the boss track
+  const f=boss?BOSS_TRACK:bgmFile(S.st);
+  if(bgmSrc!==f){bgmSrc=f;bgmEl.src=f}
+  else if(bgmRun!==S){try{bgmEl.currentTime=0}catch(e){}}  // new run -> restart the track from the beginning
+  bgmRun=S;
+  bgmEl.muted=false;bgmEl.volume=BGM_VOL;
+  if(bgmEl.paused)bgmEl.play().catch(function(){});
 }catch(e){}}
 function tone(f,t,d,ty,v){const o=AC.createOscillator(),g=AC.createGain();o.type=ty;o.frequency.value=f;g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(.001,t+d);o.connect(g);g.connect(AC.destination);o.start(t);o.stop(t+d)}
 function bgmTick(){try{syncStageBgm();
- // Stage MP3 plays during normal stage; procedural BGM during boss (or stages without MP3)
- if(S&&STAGE_BGM[S.st]&&!(S.boss&&S.ph!==2))return;
+ // MP3 is handled by syncStageBgm; the synth music only runs for boss fights when BOSS_THEME=1
+ if(!(BOSS_THEME&&S&&S.boss&&S.ph!==2))return;
  if(!run||PZ||MUTE||!S)return;AC=AC||new(window.AudioContext||window.webkitAudioContext)();if(AC.state=='suspended')AC.resume();
  const bs=S.boss&&S.ph!=2,sc=SCL[(S.st-1)%5],dur=60/(bs?156:116)/2,off=bs?-4:((S.st-1)%5)*2;if(bgS<AC.currentTime)bgS=AC.currentTime+.05;
  while(bgS<AC.currentTime+.3){const i=bgN++,bar=(i>>3)%5,f=(o,k)=>55*Math.pow(2,(off+o+k)/12);
@@ -156,7 +169,7 @@ function hurtM(e,d){if(e.tf>0||e.dy>0||e.intro)return;e.hf=.08;const mt=e.mt|0;
  else{e.hp-=d;burst(e.x,e.y,2,'#7ff',120);if(e.hp<=0){e.hp=0;e.dy=1.8;S.eb=[]}}}
 function midAI(e,dt){const s=S,mt=e.mt|0,T=tgt(e);e.fx=(e.tf>0?1:0)+(e.dy>0?2:0);e.t=(e.t||0)+dt;if(e.intro){const ready=(mt==1?e.y>=145:(mt==2?e.y>=105:e.y>=125));if(ready&&e.t>0.6)e.intro=0;}
  if(e.dy>0){e.dy-=dt;e.y+=10*dt;if(Math.random()<dt*14)burst(e.x+R(-50,50),e.y+R(-30,30),12,'#fa4',200);s.sh=Math.max(s.sh,6);
-  if(e.dy<=0){burst(e.x,e.y,90,'#fa4',360);s.sh=14;s.it.push(dropItem(e.x-34,e.y,'H'),dropItem(e.x+34,e.y,'O'));pushDropItem(e.x,e.y,'W');kill(e)}return}
+  if(e.dy<=0){burst(e.x,e.y,90,'#fa4',360);s.sh=14;s.it.push(dropItem(e.x+34,e.y,'O'));pushDropItem(e.x,e.y,'W');kill(e)}return}
  if(e.tf>0){e.tf-=dt;if(Math.random()<dt*10)burst(e.x+R(-40,40),e.y+R(-25,25),8,'#fd5',160);if(e.tf<=0){e.phase=2;e.fire=1.2;e.st=0;e.hc=1.2;e.sa=0;s.msg=MBT[mt];s.mt=1.4}return}
  const rg=e.phase>1&&e.hp/e.mh<.35,fr=DFS[DF].fr*(rg?.7:1),p1=e.phase==1,sm=(v,t)=>v+(t-v)*Math.min(1,3*dt);e.fire-=dt;
  const shoot=(j,per,sp,spr)=>{if(!(e.pm>>j&1))return;e.pf[j]-=dt;if(e.pf[j]<=0){e.pf[j]=per*fr;const pp=partPos(e,j),px=e.x+pp[0],py=e.y+pp[1],a=Math.atan2(T.y-py,T.x-px);eshot(px,py,a,sp);if(spr){eshot(px,py,a+spr,sp);eshot(px,py,a-spr,sp)}}};
@@ -792,7 +805,7 @@ function kill(e){const s=S,B=e.k=='b';e.dead=1;debris(e);if(GK.includes(e.k)){co
  const gained=Math.round(e.sc*mul);s.sc+=gained;rkAdd(B?.03:(e.elite?.008:.003));if(!B){s.kS=(s.kS||0)+1;for(const p of alive())p.chg=Math.min(100,(p.chg||0)+(e.elite?8:3))}
  burst(e.x,e.y,B?70:e.elite?28:14,e.elite?'#fd5':'#fa4',B?340:e.elite?260:180);if(B)s.sh=14;
  if(B){s.boss=0;s.ph=2;s.ct=6.5;s.eb=[];{const h=s.hitsS||0,stars=1+(h<=2?1:0)+(h==0?1:0),bonus=stars*1000*s.st;s.res={st:s.st,t:s.tm|0,k:s.kS||0,g:s.goldS||0,h,c:s.maxCombo,rk:Math.round(s.rk*100),sc:s.sc-s.s0,b:bonus,stars};s.sc+=bonus;[523,659,784,1047].forEach((f,i)=>setTimeout(()=>sfx(f,.25,'square',.06),i*130))}s.msg='STAGE '+s.st+' CLEAR';s.mt=4;
-  s.bd=1;{const r2=Math.random(),sup=r2<.4?'O':r2<.7?'S':'B';s.it.push(dropItem(e.x-30,e.y,'H'),dropItem(e.x+30,e.y,sup));pushDropItem(e.x,e.y-10,'W')}s.bd=0}
+  s.bd=1;{const pool=['O','S','B'];pool.splice(Math.floor(Math.random()*3),1);const cx=function(v){return Math.max(28,Math.min(W-28,v))};s.it.push(dropItem(cx(e.x-60),e.y,'H'),dropItem(cx(e.x+50),e.y,pool[0]),dropItem(cx(e.x+100),e.y,pool[1]));pushDropItem(e.x,e.y-10,'W')}s.bd=0}
  else{
   const dr=DFS[DF].drop*(e.elite?2.2:1);
   if(Math.random()<dr&&s.t-(s.lastDrop||-9)>3.8){s.lastDrop=s.t;pushDropItem(e.x,e.y)}
