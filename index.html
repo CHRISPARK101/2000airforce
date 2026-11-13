@@ -100,8 +100,28 @@ function useChg(p){if(S.dp||!p||!p.on||p.dead||p.rs>0||p.en>0||S.over||(p.chg||0
 // ===== SOUND: mute toggle (M key / speaker icon) + procedural BGM (stage theme / boss theme) =====
 let MUTE=0;try{MUTE=+localStorage.getItem('mm')||0}catch(e){}let GOD=0;
 let bgS=0,bgN=0;const SCL=[[0,3,5,7,10],[0,2,5,7,9],[0,3,5,8,10],[0,2,4,7,9],[0,3,6,7,10]];
+// Stage BGM tracks (MP3). Volume is 0..1. Stage 1 uses Canopy_Ambush at 15%.
+const STAGE_BGM={1:{src:'Canopy_Ambush.mp3',vol:0.15},2:{src:'Iron_Piston_Strike.mp3',vol:0.15},3:{src:'Salt_and_Iron.mp3',vol:0.15},4:{src:'City_Under_Fire.mp3',vol:0.15},5:{src:'Before_the_Final_Jump.mp3',vol:0.15}};
+let stageAudio=null,stageAudioSt=0;
+function stopStageBgm(){try{if(stageAudio){stageAudio.pause();stageAudio.currentTime=0}}catch(e){}stageAudio=null;stageAudioSt=0}
+function syncStageBgm(){try{
+  if(!run||!S||MUTE||PZ||S.over){if(stageAudio&&!stageAudio.paused)stageAudio.pause();return}
+  // During boss fight, pause stage MP3 and let procedural boss theme take over
+  if(S.boss&&S.ph!==2){if(stageAudio&&!stageAudio.paused)stageAudio.pause();return}
+  const conf=STAGE_BGM[S.st];
+  if(!conf){if(stageAudio){stageAudio.pause();stageAudioSt=0}return}
+  if(!stageAudio||stageAudioSt!==S.st){
+    if(stageAudio){try{stageAudio.pause()}catch(e){}}
+    stageAudio=new Audio(conf.src);stageAudio.loop=true;stageAudio.volume=conf.vol;stageAudioSt=S.st;
+  }
+  stageAudio.volume=conf.vol;
+  if(stageAudio.paused)stageAudio.play().catch(function(){});
+}catch(e){}}
 function tone(f,t,d,ty,v){const o=AC.createOscillator(),g=AC.createGain();o.type=ty;o.frequency.value=f;g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(.001,t+d);o.connect(g);g.connect(AC.destination);o.start(t);o.stop(t+d)}
-function bgmTick(){try{if(!run||PZ||MUTE||!S)return;AC=AC||new(window.AudioContext||window.webkitAudioContext)();if(AC.state=='suspended')AC.resume();
+function bgmTick(){try{syncStageBgm();
+ // Stage MP3 plays during normal stage; procedural BGM during boss (or stages without MP3)
+ if(S&&STAGE_BGM[S.st]&&!(S.boss&&S.ph!==2))return;
+ if(!run||PZ||MUTE||!S)return;AC=AC||new(window.AudioContext||window.webkitAudioContext)();if(AC.state=='suspended')AC.resume();
  const bs=S.boss&&S.ph!=2,sc=SCL[(S.st-1)%5],dur=60/(bs?156:116)/2,off=bs?-4:((S.st-1)%5)*2;if(bgS<AC.currentTime)bgS=AC.currentTime+.05;
  while(bgS<AC.currentTime+.3){const i=bgN++,bar=(i>>3)%5,f=(o,k)=>55*Math.pow(2,(off+o+k)/12);
   if(i%2==0)tone(f(sc[bar],0),bgS,dur*1.8,'triangle',.05);if(i%4==0)tone(70,bgS,.12,'sine',.07);
@@ -431,7 +451,7 @@ function skipStage(n){if(!S||!run||S.over||net.mode==='guest')return;const max=S
 function cont(){if(CN<=0)return;CN--;const s=S;s.over=false;s.eb=[];s.msg='CONTINUE';s.mt=1.5;
  const pen=3-CN; // 0,1,2 — later continues start with fewer hearts
  for(const p of s.P){if(!p.on)continue;p.dead=0;p.dyT=0;p.lv=1;p.wLv=0;p.frMul=1;p.spdMul=1;p.dashBoost=0;startEnter(p);p.magT=0;p.hp=5-Math.min(2,pen);p.dc=0;p.inv=2.5;p.sp=0;if((p.bombs||0)<3)p.bombs=3}}
-function backToMenu(){if(net.mode=='host'&&net.ch){send({t:'bye'});setTimeout(cleanup,300)}run=false;ptr.d=false;ptr.id=null;info('');K.enter=0;K[' ']=0;$('menu').style.display='flex';}
+function backToMenu(){if(net.mode=='host'&&net.ch){send({t:'bye'});setTimeout(cleanup,300)}run=false;ptr.d=false;ptr.id=null;info('');K.enter=0;K[' ']=0;stopStageBgm();$('menu').style.display='flex';}
 const alive=()=>S.P.filter(p=>p.on&&!p.dead),np=()=>S.P[1].on?1.6:1;
 function tgt(e){let b=null,bd=1e9;for(const p of alive()){const d=D(e,p);if(d<bd){bd=d;b=p}}return b||S.P[0]}
 function burst(x,y,n,c,sp){const _rp=()=>{if(net.mode=='host')S.q.push([x|0,y|0,n,c,sp])};
@@ -753,7 +773,8 @@ function hurt(e,d){if(e.dead)return;if(e.k=='b'&&e.tf>0)return;if(e.k=='bp'&&e.p
  let near=false;for(const p of alive()){if(D(e,p)<95){near=true;break}}
  if(near)dealt*=1.35;
  if(S.fever>0)dealt*=1.25;
- if(e.k=='b'&&e.open<=0)dealt*=.50;
+ if(e.k=='b'&&e.open<=0)dealt*=.55; // closed armor
+ if(e.k=='b'&&e.open>0)dealt*=.82; // open is still better, but less of a melt spike
  if(e.k=='b'&&e.fm==2&&S.e.some(o=>o.k=='bp'&&!o.dead&&o.ps==1))dealt*=.6; // link shield while pods live
  if(e.k=='g'&&e.shield>0){e.shieldHp-=d;if(e.shieldHp<=0){e.shield=0;S.msg='SHIELD BROKEN';S.mt=.8}else dealt*=.45}
  if(e.elite)dealt*=0.85;
@@ -1035,12 +1056,12 @@ function upd(dt){const s=S;if(s.over)return;if(s.slowT>0){s.slowT-=dt;dt*=.35}
   else if(e.y<150){e.y+=55*em*dt;e.intro=1}
   else{e.intro=0;
     const phase=e.fm||1;e.phase=phase; // phase = current boss form (I armored, II separated, III overdrive)
-    // Weak point cycle (more frequent in later phases)
+    // Weak point cycle — readable window, but not an instant phase-melt
     e.open=(e.open||0)-dt;
     e.openCd=(e.openCd||3.2)-dt;
     if(e.openCd<=0){
-      e.open=phase===3?1.15:0.85;
-      e.openCd=phase===3?2.3:phase===2?3.0:3.6;
+      e.open=phase===3?1.35:1.1;           // slightly longer so players can react
+      e.openCd=phase===3?2.8:phase===2?3.5:4.2; // less frequent opens → longer phases
       s.msg='WEAK POINT OPEN';s.mt=.75;
     }
     const bid=(s.st-1)%5; // 0=Dreadnought, 1=Bio, 2=Gunship, 3=Skull, 4=Seraph
@@ -1134,18 +1155,20 @@ function upd(dt){const s=S;if(s.over)return;if(s.slowT>0){s.slowT-=dt;dt*=.35}
     // Strategy: clear adds quickly, dodge the death ray.
     else if(bid===3){
       e.x=W/2+Math.sin(e.t*0.5)*(DF===0?90:120);
-      // Summon helpers occasionally
+      // Summon helpers occasionally (Easy: fewer adds, longer gaps)
       e.sum=(e.sum||2.5)-dt;
-      if(e.sum<=0&&s.e.filter(o=>!o.dead&&o.k!=='b').length<7){
-        e.sum=phase===3?3.2:4.5;
+      const addCap=DF===0?3:(DF===1?5:7);
+      if(e.sum<=0&&s.e.filter(o=>!o.dead&&o.k!=='b'&&o.k!=='bp').length<addCap){
+        e.sum=(phase===3?3.2:4.5)*(DF===0?1.55:DF===1?1.2:1);
         const sx=e.x+(Math.random()<.5?-50:50);
         s.e.push({k:'z',x:sx,y:e.y+30,x0:sx,hp:Math.ceil((2+s.st)*np()*DFS[DF].hp),r:12,t:0,d:Math.random()<.5?1:-1,sc:80,fire:R(0.8,1.5)});
-        if(phase>=2)s.e.push({k:'v',x:e.x,y:e.y+20,hp:Math.ceil((3+s.st)*np()*DFS[DF].hp),r:12,sc:120,fire:1});
+        // phase 2+ extra chaser only on Normal/Hard
+        if(phase>=2&&DF>0)s.e.push({k:'v',x:e.x,y:e.y+20,hp:Math.ceil((3+s.st)*np()*DFS[DF].hp),r:12,sc:120,fire:1});
         bossWarn(e,'ADDS INCOMING');
       }
-      // Death ray telegraph
+      // Death ray telegraph (longer warn so players can dodge)
       if(phase>=2&&(e.ray||0)<=0&&e.a<-0.5){
-        e.ray=1.1;e.rx=T.x;bossWarn(e,'DEATH RAY');
+        e.ray=1.45;e.rx=T.x;bossWarn(e,'DEATH RAY');
       }
       if(e.ray>0){
         e.ray-=dt;
@@ -1233,7 +1256,7 @@ function conn(code,cb){if(!SB_URL||!SB_KEY){info('Set SB_URL and SB_KEY at the t
  ch.on('broadcast',{event:'m'},({payload})=>onMsg(payload)).subscribe((st,err)=>{console.log('[mecha] channel',st,err||'');if(st=='SUBSCRIBED')cb();else if(st=='CHANNEL_ERROR'||st=='TIMED_OUT'||st=='CLOSED')info('Connection failed ('+st+(err&&err.message?': '+err.message:'')+')\nCheck that the Supabase project is active (not paused) and the network')})}
 function go(){$('menu').style.display='none';PZ=0;run=true}
 function cleanup(){clearInterval(net.jt);clearTimeout(net.jto);if(net.ch&&net.sb){try{net.sb.removeChannel(net.ch)}catch(e){}}net.ch=null;net.guest=0;net.started=0;net.gid=null}
-function leave(msg){cleanup();net.mode='solo';run=false;ptr.d=false;ptr.id=null;$('menu').style.display='flex';info(msg||'')}
+function leave(msg){cleanup();net.mode='solo';run=false;ptr.d=false;ptr.id=null;stopStageBgm();$('menu').style.display='flex';info(msg||'')}
 function onMsg(m){
  if(net.mode=='host'){
   if(m.t=='join'){if(net.gid&&net.gid!=m.id)return;net.gid=m.id;const ty=[0,1,2].includes(m.ty)?m.ty:0;
@@ -1307,7 +1330,7 @@ function drawEnemy(e){const th=(S.st-1)%3,k=e.k;if(k=='M'){drawMid(e);return}if(
   // Gunship dive warning
   if(bid===2&&e.dive>0){X.save();X.strokeStyle='rgba(255,120,40,0.85)';X.lineWidth=3;X.setLineDash([8,5]);X.beginPath();X.moveTo(e.x,e.y);X.lineTo(e.dx||e.x,H-40);X.stroke();X.setLineDash([]);X.restore()}
   // Skull death-ray telegraph
-  if(bid===3&&e.ray>0){X.save();X.strokeStyle='rgba(255,40,40,0.7)';X.lineWidth=6+Math.sin(S.t*25)*2;X.globalAlpha=.5+Math.sin(S.t*18)*.3;X.beginPath();X.moveTo(e.x,e.y);X.lineTo(e.rx||e.x,H);X.stroke();X.globalAlpha=1;X.restore()}
+  if(bid===3&&e.ray>0){X.save();X.strokeStyle='rgba(255,40,40,0.85)';X.lineWidth=10+Math.sin(S.t*25)*3;X.globalAlpha=.55+Math.sin(S.t*18)*.35;X.beginPath();X.moveTo(e.x,e.y);X.lineTo(e.rx||e.x,H);X.stroke();X.strokeStyle='rgba(255,180,80,0.9)';X.lineWidth=3;X.beginPath();X.moveTo(e.x,e.y);X.lineTo(e.rx||e.x,H);X.stroke();X.globalAlpha=1;X.restore()}
   // Bio pulse
   if(bid===1&&e.open<=0){X.save();X.strokeStyle='rgba(80,255,120,0.35)';X.lineWidth=2;X.beginPath();X.arc(e.x,e.y,e.r+10+Math.sin(S.t*8)*4,0,6.283);X.stroke();X.restore()}
   return;
